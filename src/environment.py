@@ -1,5 +1,5 @@
 """
-Multi-Agent DQN Coordination - Day 3 Setup
+Multi-Agent DQN Coordination - Setup
 ===========================================
 5x5 Grid World Environment with 4 Agents
 Task: Shuttle items from A to B, avoid collisions
@@ -10,9 +10,7 @@ from enum import Enum
 from typing import List, Tuple, Dict
 import random
 
-# ============================================
 # 1. MOVEMENT ENUM (As per requirement)
-# ============================================
 class Action(Enum):
     """4 directional movements - NO WAIT action allowed"""
     UP = 0
@@ -35,10 +33,8 @@ class Action(Enum):
         }
         return deltas[action]
 
-
-# ============================================
+\
 # 2. AGENT CLASS
-# ============================================
 class Agent:
     """Single agent that shuttles items from A to B"""
     
@@ -277,9 +273,9 @@ if __name__ == "__main__":
     test_environment()
     
     print("\n" + "="*50)
-    print("Day 3 Setup Complete!")
+    print("Setup Complete!")
     print("="*50)
-    print("\nNext Steps for Day 4:")
+    print("\nNext Steps for Next Day")
     print("1. Implement DQN neural network")
     print("2. Add experience replay buffer")
     print("3. Create training loop structure")
