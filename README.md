@@ -25,3 +25,13 @@ python src/environment.py
 - >95% deliveries completed
 - <500 collisions during training
 - <20 steps per delivery
+
+# Multi-Agent DQN Architecture
+## Phase 2: 4 Agents Learning to Coordinate in 5×5 Grid
+
+![alt text](image.png)
+![alt text](image-1.png)
+![alt text](image-2.png)
+![alt text](image-3.png)
+![alt text](image-4.png)
+![alt text](image-5.png)
