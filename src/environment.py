@@ -151,60 +151,51 @@ class MultiAgentGridWorld:
         """
         return len(positions) != len(set(positions))
     
-    def step(self, actions: List[Action]) -> Tuple[np.ndarray, List[float], bool, Dict]:
-        """
-        Execute one step in environment
-        
-        Args:
-            actions: List of actions for each agent
-            
-        Returns:
-            next_state: New state after actions
-            rewards: List of rewards for each agent
-            done: Whether episode is done
-            info: Additional information
-        """
+    def step(self, actions):
         new_positions = []
         rewards = [0.0] * self.num_agents
+        old_positions = [agent.position for agent in self.agents]
         
-        # Calculate new positions
         for agent, action in zip(self.agents, actions):
             new_pos = agent.move(action, self.grid_size)
             new_positions.append(new_pos)
         
-        # Check for collisions
         collision = self.check_collision(new_positions)
         
         if collision:
             self.total_collisions += 1
-            # Penalty for collision
-            rewards = [-10.0] * self.num_agents
-            # Don't move agents if collision
+            rewards = [-2.0] * self.num_agents
         else:
-            # Update agent positions
             for agent, new_pos in zip(self.agents, new_positions):
                 agent.position = new_pos
                 agent.total_steps += 1
             
-            # Check for pickups and dropoffs
-            for i, agent in enumerate(self.agents):
+            for idx, agent in enumerate(self.agents):
+                reward = -0.1
+                
                 if agent.position == self.location_A and not agent.has_item:
                     agent.pickup_item()
-                    rewards[i] += 1.0  # Small reward for pickup
+                    reward = 5.0  # OVERRIDE, not +=
                 
                 elif agent.position == self.location_B and agent.has_item:
                     agent.dropoff_item()
                     self.total_deliveries += 1
-                    rewards[i] += 10.0  # Large reward for successful delivery
+                    reward = 20.0  # OVERRIDE, not +=
                 
-                # Small penalty for each step (encourage efficiency)
-                rewards[i] -= 0.1
+                else:
+                    target = self.location_B if agent.has_item else self.location_A
+                    old_dist = abs(old_positions[idx][0] - target[0]) + abs(old_positions[idx][1] - target[1])
+                    new_dist = abs(agent.position[0] - target[0]) + abs(agent.position[1] - target[1])
+                    
+                    if new_dist < old_dist:
+                        reward = 0.5
+                    elif new_dist > old_dist:
+                        reward = -0.3
+                
+                rewards[idx] = reward
         
         self.total_steps += 1
-        
-        # Check if episode is done
-        done = (self.total_steps >= self.max_steps or 
-                self.total_collisions >= self.max_collisions)
+        done = (self.total_steps >= self.max_steps or self.total_collisions >= self.max_collisions)
         
         info = {
             'total_steps': self.total_steps,
@@ -213,9 +204,7 @@ class MultiAgentGridWorld:
             'collision_this_step': collision
         }
         
-        next_state = self.get_state()
-        
-        return next_state, rewards, done, info
+        return self.get_state(), rewards, done, info
     
     def render(self):
         """Visual representation of the grid"""

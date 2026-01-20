@@ -3,13 +3,13 @@ COMPLETE FIXED TRAINING SYSTEM
 ===============================
 Fixes all issues with the original training
 """
-
+import os
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import yaml
-import os
 from datetime import datetime
 import json
 import sys
@@ -487,6 +487,7 @@ class ImprovedTrainer:
             print(f"  💾 Checkpoint saved: episode {episode}")
     
     def evaluate(self, num_episodes=20):
+        self.agent_system.agents[0].policy_net.eval()
         """Evaluate trained agent"""
         print("\n" + "="*70)
         print("📊 EVALUATING AGENT")
@@ -535,6 +536,7 @@ class ImprovedTrainer:
         success_rate = total_deliveries / max(1, total_attempts)
         print(f"Success Rate:   {success_rate:.2%}")
         print("="*70 + "\n")
+        self.agent_system.agents[0].policy_net.train()
 
 
 # ============================================
