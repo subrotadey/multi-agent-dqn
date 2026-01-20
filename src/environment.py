@@ -88,7 +88,7 @@ class MultiAgentGridWorld:
         
         # Initialize agents at different positions
         start_positions = [
-            (0, 0), (0, 1), (1, 0), (1, 1)
+            (0, 0), (0, 4), (4, 0), (4, 4)
         ]
         self.agents = [Agent(i, start_positions[i]) for i in range(num_agents)]
         
@@ -103,7 +103,14 @@ class MultiAgentGridWorld:
         
     def reset(self):
         """Reset environment to initial state"""
-        start_positions = [(0, 0), (0, 1), (1, 0), (1, 1)]
+        # FIXED: Spread out starting positions
+        start_positions = [
+            (0, 0),  # Top-left (at A)
+            (0, 4),  # Top-right  
+            (4, 0),  # Bottom-left
+            (4, 4)   # Bottom-right (at B)
+        ]
+        
         for i, agent in enumerate(self.agents):
             agent.position = start_positions[i]
             agent.has_item = False
