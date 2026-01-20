@@ -1,19 +1,19 @@
 environment:
   grid_size: 5
   num_agents: 4
-  max_steps: 1500
-  max_collisions: 4
+  max_steps: 200        # Changed from 1500
+  max_collisions: 20    # Changed from 4
 
 training:
-  episodes: 1000
-  learning_rate: 0.001
-  gamma: 0.99
+  episodes: 2000        # Changed from 1000
+  learning_rate: 0.0003 # Changed from 0.001
+  gamma: 0.95           # Changed from 0.99
   epsilon_start: 1.0
-  epsilon_end: 0.01
-  epsilon_decay: 0.995
+  epsilon_end: 0.05     # Changed from 0.01
+  epsilon_decay: 0.9995 # Changed from 0.995
   batch_size: 64
-  memory_size: 10000
+  memory_size: 50000    # Changed from 10000
 
 model:
-  hidden_layers: [128, 64]
+  hidden_layers: [256, 128]  # Changed from [128, 64]
   activation: relu

@@ -1,5 +1,5 @@
 """
-Multi-Agent DQN Coordination - Setup
+Multi-Agent DQN Coordination - Environment
 ===========================================
 5x5 Grid World Environment with 4 Agents
 Task: Shuttle items from A to B, avoid collisions
@@ -10,7 +10,8 @@ from enum import Enum
 from typing import List, Tuple, Dict
 import random
 
-# 1. MOVEMENT ENUM (As per requirement)
+
+# 1. MOVEMENT ENUM
 class Action(Enum):
     """4 directional movements - NO WAIT action allowed"""
     UP = 0
@@ -33,7 +34,7 @@ class Action(Enum):
         }
         return deltas[action]
 
-\
+
 # 2. AGENT CLASS
 class Agent:
     """Single agent that shuttles items from A to B"""
@@ -68,9 +69,7 @@ class Agent:
         return f"Agent{self.id}@{self.position} {'[ITEM]' if self.has_item else ''}"
 
 
-# ============================================
 # 3. GRID ENVIRONMENT
-# ============================================
 class MultiAgentGridWorld:
     """
     5x5 Grid World Environment
@@ -98,7 +97,7 @@ class MultiAgentGridWorld:
         self.total_collisions = 0
         self.total_deliveries = 0
         
-        # Training budgets (from assignment)
+        # Training budgets
         self.max_steps = 1500
         self.max_collisions = 4
         
@@ -232,9 +231,7 @@ class MultiAgentGridWorld:
         print()
 
 
-# ============================================
-# 4. TESTING THE ENVIRONMENT
-# ============================================
+# 4. TESTING
 def test_environment():
     """Test basic environment functionality"""
     print("Testing Multi-Agent Grid Environment\n")
@@ -269,14 +266,8 @@ def test_environment():
 
 
 if __name__ == "__main__":
-    # Test the environment
     test_environment()
     
     print("\n" + "="*50)
-    print("Setup Complete!")
-    print("="*50)
-    print("\nNext Steps for Next Day")
-    print("1. Implement DQN neural network")
-    print("2. Add experience replay buffer")
-    print("3. Create training loop structure")
+    print("Environment Setup Complete!")
     print("="*50)
