@@ -1,8 +1,3 @@
-"""
-COMPLETE FIXED TRAINING SYSTEM
-===============================
-Fixes all issues with the original training
-"""
 import os
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 import torch
@@ -18,23 +13,25 @@ sys.path.insert(0, 'src')
 
 from environment import MultiAgentGridWorld, Action
 from agent import MultiAgentDQNSystem
+from assignment_evaluator import AssignmentEvaluator
 
 
-# ============================================
-# 1. FIXED ENVIRONMENT
-# ============================================
-class FixedEnvironment(MultiAgentGridWorld):
-    """Fixed environment with better starting positions and rewards"""
+class AssignmentCompliantEnvironment(MultiAgentGridWorld):
+    """Environment configured for assignment requirements"""
+    
+    def __init__(self, config):
+        super().__init__(
+            grid_size=config['environment']['grid_size'],
+            num_agents=config['environment']['num_agents']
+        )
+        # Use config values
+        self.max_steps = config['environment']['max_steps']
+        self.max_collisions = config['environment']['max_collisions']
+        self.reward_config = config.get('rewards', {})
     
     def reset(self):
-        """Reset with SPREAD OUT initial positions"""
-        # CRITICAL FIX: Agents start at corners, not clustered
-        start_positions = [
-            (0, 0),  # Top-left (at A)
-            (0, 4),  # Top-right
-            (4, 0),  # Bottom-left
-            (4, 4)   # Bottom-right (at B)
-        ]
+        """Reset with spread out starting positions"""
+        start_positions = [(0, 0), (0, 4), (4, 0), (4, 4)]
         
         for i, agent in enumerate(self.agents):
             agent.position = start_positions[i]
@@ -49,11 +46,9 @@ class FixedEnvironment(MultiAgentGridWorld):
         return self.get_state()
     
     def step(self, actions):
-        """Modified step with BETTER REWARD SHAPING"""
+        """Step with assignment-compliant rewards"""
         new_positions = []
         rewards = [0.0] * self.num_agents
-        
-        # Store old positions for distance calculation
         old_positions = [agent.position for agent in self.agents]
         
         # Calculate new positions
@@ -66,54 +61,45 @@ class FixedEnvironment(MultiAgentGridWorld):
         
         if collision:
             self.total_collisions += 1
-            # REDUCED penalty - less harsh than original -10
-            rewards = [-2.0] * self.num_agents
-            # Don't move agents if collision detected
+            collision_penalty = self.reward_config.get('collision', -10.0)
+            rewards = [collision_penalty] * self.num_agents
         else:
             # Update positions
-            for idx, (agent, new_pos) in enumerate(zip(self.agents, new_positions)):
-                old_pos = agent.position
+            for agent, new_pos in zip(self.agents, new_positions):
                 agent.position = new_pos
                 agent.total_steps += 1
+            
+            # Calculate rewards
+            for idx, agent in enumerate(self.agents):
+                step_penalty = self.reward_config.get('step', -0.1)
+                reward = step_penalty
                 
-                # === PICKUP DETECTION ===
+                # PICKUP
                 if agent.position == self.location_A and not agent.has_item:
-                    agent.has_item = True
-                    rewards[idx] += 5.0  # Reward for pickup
-                    print(f"✅ Agent {agent.id} picked up item at {agent.position}!")
+                    agent.pickup_item()
+                    reward = self.reward_config.get('pickup', 1.0)
                 
-                # === DELIVERY DETECTION ===
+                # DELIVERY
                 elif agent.position == self.location_B and agent.has_item:
-                    agent.has_item = False
-                    agent.total_deliveries += 1
+                    agent.dropoff_item()
                     self.total_deliveries += 1
-                    rewards[idx] += 20.0  # Big reward for delivery
-                    print(f"🎯 Agent {agent.id} delivered! Total: {self.total_deliveries}")
+                    reward = self.reward_config.get('delivery', 10.0)
                 
-                # === DISTANCE-BASED REWARD SHAPING ===
+                # Progress shaping
                 else:
-                    # Determine target based on item status
-                    if agent.has_item:
-                        target = self.location_B  # Go to dropoff
-                    else:
-                        target = self.location_A  # Go to pickup
+                    target = self.location_B if agent.has_item else self.location_A
+                    old_dist = abs(old_positions[idx][0] - target[0]) + abs(old_positions[idx][1] - target[1])
+                    new_dist = abs(agent.position[0] - target[0]) + abs(agent.position[1] - target[1])
                     
-                    # Calculate Manhattan distances
-                    old_dist = abs(old_pos[0] - target[0]) + abs(old_pos[1] - target[1])
-                    new_dist = abs(new_pos[0] - target[0]) + abs(new_pos[1] - target[1])
-                    
-                    # Reward for moving closer to target
                     if new_dist < old_dist:
-                        rewards[idx] += 1.0  # Progress reward
+                        reward = self.reward_config.get('progress_closer', 0.5)
                     elif new_dist > old_dist:
-                        rewards[idx] -= 0.5  # Penalty for moving away
+                        reward = self.reward_config.get('progress_away', -0.5)
                 
-                # Small step penalty to encourage efficiency
-                rewards[idx] -= 0.1
+                rewards[idx] = reward
         
         self.total_steps += 1
         
-        # Episode termination conditions
         done = (self.total_steps >= self.max_steps or 
                 self.total_collisions >= self.max_collisions)
         
@@ -127,220 +113,16 @@ class FixedEnvironment(MultiAgentGridWorld):
         return self.get_state(), rewards, done, info
 
 
-# ============================================
-# 2. TRAINING LOGGER
-# ============================================
-class TrainingLogger:
-    """Logger for tracking training metrics"""
+class AssignmentTrainer:
+    """Trainer with assignment evaluation"""
     
-    def __init__(self, log_dir="logs"):
-        self.log_dir = log_dir
-        os.makedirs(log_dir, exist_ok=True)
-        
-        self.episode_rewards = []
-        self.episode_steps = []
-        self.episode_deliveries = []
-        self.episode_collisions = []
-        self.episode_losses = []
-        self.epsilon_history = []
-        
-        self.best_reward = float('-inf')
-        self.best_deliveries = 0
-        
-    def log_episode(self, episode, total_reward, steps, deliveries, collisions, loss, epsilon):
-        """Log metrics for an episode"""
-        self.episode_rewards.append(total_reward)
-        self.episode_steps.append(steps)
-        self.episode_deliveries.append(deliveries)
-        self.episode_collisions.append(collisions)
-        self.episode_losses.append(loss if loss else 0)
-        self.epsilon_history.append(epsilon)
-        
-        if deliveries > self.best_deliveries:
-            self.best_deliveries = deliveries
-        if total_reward > self.best_reward:
-            self.best_reward = total_reward
-    
-    def print_summary(self, episode, window=100):
-        """Print summary of recent performance"""
-        if episode < window:
-            return
-        
-        recent_rewards = self.episode_rewards[-window:]
-        recent_deliveries = self.episode_deliveries[-window:]
-        recent_collisions = self.episode_collisions[-window:]
-        
-        print(f"\n{'='*70}")
-        print(f"Episode {episode} Summary (Last {window} episodes):")
-        print(f"{'='*70}")
-        print(f"  Avg Reward:      {np.mean(recent_rewards):8.2f}")
-        print(f"  Avg Deliveries:  {np.mean(recent_deliveries):8.2f}")
-        print(f"  Avg Collisions:  {np.mean(recent_collisions):8.2f}")
-        print(f"  Best Deliveries: {self.best_deliveries}")
-        print(f"  Current ε:       {self.epsilon_history[-1]:.4f}")
-        print(f"{'='*70}\n")
-    
-    def plot_training_curves(self, save_path=None):
-        """Generate and save training visualization"""
-        fig, axes = plt.subplots(2, 3, figsize=(18, 10))
-        fig.suptitle('Training Metrics - Multi-Agent DQN', fontsize=16, fontweight='bold')
-        
-        # Rewards
-        axes[0, 0].plot(self.episode_rewards, alpha=0.6, label='Raw')
-        if len(self.episode_rewards) >= 50:
-            axes[0, 0].plot(self._moving_average(self.episode_rewards, 50), 
-                          linewidth=2, label='MA(50)')
-        axes[0, 0].set_title('Episode Rewards')
-        axes[0, 0].set_xlabel('Episode')
-        axes[0, 0].set_ylabel('Total Reward')
-        axes[0, 0].legend()
-        axes[0, 0].grid(True, alpha=0.3)
-        
-        # Deliveries
-        axes[0, 1].plot(self.episode_deliveries, alpha=0.6, label='Raw')
-        if len(self.episode_deliveries) >= 50:
-            axes[0, 1].plot(self._moving_average(self.episode_deliveries, 50), 
-                          linewidth=2, label='MA(50)')
-        axes[0, 1].set_title('Deliveries per Episode')
-        axes[0, 1].set_xlabel('Episode')
-        axes[0, 1].set_ylabel('Deliveries')
-        axes[0, 1].legend()
-        axes[0, 1].grid(True, alpha=0.3)
-        
-        # Collisions
-        axes[0, 2].plot(self.episode_collisions, alpha=0.6, label='Raw')
-        if len(self.episode_collisions) >= 50:
-            axes[0, 2].plot(self._moving_average(self.episode_collisions, 50), 
-                          linewidth=2, label='MA(50)')
-        axes[0, 2].set_title('Collisions per Episode')
-        axes[0, 2].set_xlabel('Episode')
-        axes[0, 2].set_ylabel('Collisions')
-        axes[0, 2].legend()
-        axes[0, 2].grid(True, alpha=0.3)
-        
-        # Steps
-        axes[1, 0].plot(self.episode_steps, alpha=0.6, label='Raw')
-        if len(self.episode_steps) >= 50:
-            axes[1, 0].plot(self._moving_average(self.episode_steps, 50), 
-                          linewidth=2, label='MA(50)')
-        axes[1, 0].set_title('Steps per Episode')
-        axes[1, 0].set_xlabel('Episode')
-        axes[1, 0].set_ylabel('Steps')
-        axes[1, 0].legend()
-        axes[1, 0].grid(True, alpha=0.3)
-        
-        # Loss
-        axes[1, 1].plot(self.episode_losses, alpha=0.6, label='Raw')
-        if len(self.episode_losses) >= 50:
-            axes[1, 1].plot(self._moving_average(self.episode_losses, 50), 
-                          linewidth=2, label='MA(50)')
-        axes[1, 1].set_title('Training Loss')
-        axes[1, 1].set_xlabel('Episode')
-        axes[1, 1].set_ylabel('Loss')
-        axes[1, 1].legend()
-        axes[1, 1].grid(True, alpha=0.3)
-        
-        # Epsilon
-        axes[1, 2].plot(self.epsilon_history, linewidth=2, color='green')
-        axes[1, 2].set_title('Exploration Rate (Epsilon)')
-        axes[1, 2].set_xlabel('Episode')
-        axes[1, 2].set_ylabel('Epsilon')
-        axes[1, 2].grid(True, alpha=0.3)
-        
-        plt.tight_layout()
-        
-        if save_path:
-            plt.savefig(save_path, dpi=150, bbox_inches='tight')
-            print(f"✅ Training curves saved to {save_path}")
-        
-        return fig
-    
-    def _moving_average(self, data, window):
-        """Calculate moving average"""
-        if len(data) < window:
-            return data
-        return np.convolve(data, np.ones(window)/window, mode='valid')
-    
-    def save_metrics(self, filepath):
-        """Save all metrics to JSON"""
-        metrics = {
-            'episode_rewards': self.episode_rewards,
-            'episode_steps': self.episode_steps,
-            'episode_deliveries': self.episode_deliveries,
-            'episode_collisions': self.episode_collisions,
-            'episode_losses': self.episode_losses,
-            'epsilon_history': self.epsilon_history,
-            'best_reward': float(self.best_reward),
-            'best_deliveries': int(self.best_deliveries)
-        }
-        
-        with open(filepath, 'w') as f:
-            json.dump(metrics, f, indent=2)
-        print(f"✅ Metrics saved to {filepath}")
-
-
-# ============================================
-# 3. IMPROVED CONFIG
-# ============================================
-class ImprovedConfig:
-    """Better hyperparameters for learning"""
-    
-    @staticmethod
-    def save_improved_config():
-        """Create optimized configuration file"""
-        config = {
-            'environment': {
-                'grid_size': 5,
-                'num_agents': 4,
-                'max_steps': 1500,
-                'max_collisions': 10  # Increased tolerance
-            },
-            'training': {
-                'episodes': 1000,
-                'learning_rate': 0.0005,  # Reduced for stability
-                'gamma': 0.95,  # Slightly reduced discount
-                'epsilon_start': 1.0,
-                'epsilon_end': 0.05,  # Higher minimum exploration
-                'epsilon_decay': 0.998,  # Slower decay
-                'batch_size': 64,
-                'memory_size': 10000
-            },
-            'model': {
-                'hidden_layers': [128, 64],
-                'activation': 'relu'
-            }
-        }
-        
-        with open('config_improved.yaml', 'w') as f:
-            yaml.dump(config, f)
-        print("✅ Improved config saved to config_improved.yaml")
-        
-        return config
-
-
-# ============================================
-# 4. MAIN TRAINER
-# ============================================
-class ImprovedTrainer:
-    """Improved training with all fixes"""
-    
-    def __init__(self, config_path="config_improved.yaml"):
-        # Create improved config if doesn't exist
-        if not os.path.exists(config_path):
-            ImprovedConfig.save_improved_config()
-        
+    def __init__(self, config_path="config.yaml"):
+        # Load config
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
         
-        # Use FIXED environment
-        self.env = FixedEnvironment(
-            grid_size=self.config['environment']['grid_size'],
-            num_agents=self.config['environment']['num_agents']
-        )
-        
-        # Override max steps/collisions
-        self.env.max_steps = self.config['environment']['max_steps']
-        self.env.max_collisions = self.config['environment']['max_collisions']
+        # Create environment
+        self.env = AssignmentCompliantEnvironment(self.config)
         
         # Agent system
         self.agent_system = MultiAgentDQNSystem(
@@ -351,46 +133,63 @@ class ImprovedTrainer:
             config_path=config_path
         )
         
-        # Logger
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.logger = TrainingLogger(log_dir=f"logs/run_{timestamp}")
+        # Assignment evaluator
+        self.evaluator = AssignmentEvaluator(config_path)
         
+        # Training params
         self.num_episodes = self.config['training']['episodes']
-        self.target_update_freq = 500  # Update target network frequently
+        self.target_update_freq = self.config['training'].get('target_update_freq', 200)
+        self.warm_start_steps = self.config['training'].get('warm_start_steps', 5000)
         self.save_freq = 100
         
         self.action_map = [Action.UP, Action.DOWN, Action.LEFT, Action.RIGHT]
         self.global_step = 0
         
+        # Logging
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.log_dir = f"logs/run_{timestamp}"
+        os.makedirs(self.log_dir, exist_ok=True)
+        
+        # Metrics
+        self.episode_rewards = []
+        self.episode_deliveries = []
+        self.episode_collisions = []
+        self.episode_losses = []
+        
+        self.best_avg_deliveries = 0
+        self.best_model_episode = 0
+    
     def train(self):
         """Main training loop"""
         print("\n" + "="*70)
-        print("🚀 TRAINING MULTI-AGENT DQN")
+        print("🚀 ASSIGNMENT COMPLIANT TRAINING")
         print("="*70)
         print(f"Episodes:         {self.num_episodes}")
+        print(f"Warm Start:       {self.warm_start_steps} steps")
         print(f"Max Steps:        {self.env.max_steps}")
         print(f"Max Collisions:   {self.env.max_collisions}")
-        print(f"Learning Rate:    {self.config['training']['learning_rate']}")
-        print(f"Epsilon Decay:    {self.config['training']['epsilon_decay']}")
+        print(f"Collision Penalty: {self.config['rewards']['collision']}")
+        print(f"Delivery Reward:  {self.config['rewards']['delivery']}")
         print("="*70 + "\n")
         
+        # PHASE 1: Warm start
+        if self.warm_start_steps > 0:
+            print(f"🔥 WARM START: Collecting {self.warm_start_steps} experiences...")
+            self._warm_start()
+            print(f"✅ Warm start complete! Buffer size: {len(self.agent_system.agents[0].memory)}\n")
+        
+        # PHASE 2: Training
         for episode in range(1, self.num_episodes + 1):
-            episode_reward, episode_steps, episode_info = self._run_episode(episode)
+            episode_reward, episode_info = self._run_episode()
             
-            # Calculate average loss
-            recent_losses = self.agent_system.agents[0].losses[-episode_steps:] if self.agent_system.agents[0].losses else []
+            # Log metrics
+            self.episode_rewards.append(episode_reward)
+            self.episode_deliveries.append(episode_info['deliveries'])
+            self.episode_collisions.append(episode_info['collisions'])
+            
+            recent_losses = self.agent_system.agents[0].losses[-episode_info['steps']:] if self.agent_system.agents[0].losses else []
             avg_loss = np.mean(recent_losses) if recent_losses else 0
-            
-            # Log episode
-            self.logger.log_episode(
-                episode=episode,
-                total_reward=episode_reward,
-                steps=episode_steps,
-                deliveries=episode_info['deliveries'],
-                collisions=episode_info['collisions'],
-                loss=avg_loss,
-                epsilon=self.agent_system.agents[0].epsilon
-            )
+            self.episode_losses.append(avg_loss)
             
             # Print progress
             if episode % 10 == 0:
@@ -398,33 +197,68 @@ class ImprovedTrainer:
                       f"Reward: {episode_reward:7.2f} | "
                       f"Del: {episode_info['deliveries']:2d} | "
                       f"Col: {episode_info['collisions']:2d} | "
-                      f"Steps: {episode_steps:4d} | "
+                      f"Steps: {episode_info['steps']:4d} | "
                       f"ε: {self.agent_system.agents[0].epsilon:.3f} | "
                       f"Loss: {avg_loss:.4f}")
             
-            # Print summary
+            # Checkpoint
             if episode % 100 == 0:
-                self.logger.print_summary(episode)
+                self._print_summary(episode)
+                
+                recent_deliveries = self.episode_deliveries[-100:]
+                avg_deliveries = np.mean(recent_deliveries)
+                
+                if avg_deliveries > self.best_avg_deliveries:
+                    self.best_avg_deliveries = avg_deliveries
+                    self.best_model_episode = episode
+                    self._save_checkpoint(f'best_ep{episode}')
+                    print(f"  🏆 NEW BEST! Avg deliveries: {avg_deliveries:.2f}")
+                
                 self._save_checkpoint(episode)
         
         # Final save
         self._save_checkpoint('final')
-        self.logger.plot_training_curves(
-            save_path=os.path.join(self.logger.log_dir, 'training_curves.png')
-        )
-        self.logger.save_metrics(
-            filepath=os.path.join(self.logger.log_dir, 'metrics.json')
-        )
+        self._save_plots()
+        self._save_metrics()
         
         print("\n" + "="*70)
         print("✅ TRAINING COMPLETE!")
         print("="*70)
-        print(f"Best Deliveries: {self.logger.best_deliveries}")
-        print(f"Best Reward:     {self.logger.best_reward:.2f}")
-        print(f"Logs saved to:   {self.logger.log_dir}")
+        print(f"Best Model: Episode {self.best_model_episode}")
+        print(f"Best Avg Deliveries: {self.best_avg_deliveries:.2f}")
+        print(f"Logs saved to: {self.log_dir}")
         print("="*70 + "\n")
+        
+        # Evaluate
+        print("\n📊 EVALUATING BEST MODEL...")
+        self._load_best_model()
+        self.evaluate(num_episodes=20)
     
-    def _run_episode(self, episode):
+    def _warm_start(self):
+        """Collect initial experiences"""
+        state = self.env.reset()
+        steps = 0
+        
+        pbar = tqdm(total=self.warm_start_steps, desc="Warm Start")
+        
+        while steps < self.warm_start_steps:
+            actions = [np.random.randint(4) for _ in range(4)]
+            action_enums = [self.action_map[a] for a in actions]
+            
+            next_state, rewards, done, info = self.env.step(action_enums)
+            
+            self.agent_system.store_experiences(state, actions, rewards, next_state, done)
+            
+            state = next_state
+            steps += 1
+            pbar.update(1)
+            
+            if done:
+                state = self.env.reset()
+        
+        pbar.close()
+    
+    def _run_episode(self):
         """Run one training episode"""
         state = self.env.reset()
         total_reward = 0
@@ -432,33 +266,22 @@ class ImprovedTrainer:
         done = False
         
         while not done:
-            # Select actions (with exploration)
             action_indices = self.agent_system.select_actions(state, explore=True)
             actions = [self.action_map[idx] for idx in action_indices]
             
-            # Execute actions
             next_state, rewards, done, info = self.env.step(actions)
             
-            # Store experiences
             self.agent_system.store_experiences(state, action_indices, rewards, next_state, done)
+            self.agent_system.train_step()
             
-            # Train agent
-            loss = self.agent_system.train_step()
-            
-            # Update target network periodically
             if self.global_step % self.target_update_freq == 0:
                 self.agent_system.update_target_networks()
             
-            # Update state
             state = next_state
             total_reward += sum(rewards)
             episode_steps += 1
             self.global_step += 1
-            
-            if done:
-                break
         
-        # Decay epsilon after each episode
         self.agent_system.decay_epsilon()
         
         episode_info = {
@@ -467,14 +290,32 @@ class ImprovedTrainer:
             'steps': self.env.total_steps
         }
         
-        return total_reward, episode_steps, episode_info
+        return total_reward, episode_info
+    
+    def _print_summary(self, episode, window=100):
+        """Print training summary"""
+        if episode < window:
+            return
+        
+        recent_rewards = self.episode_rewards[-window:]
+        recent_deliveries = self.episode_deliveries[-window:]
+        recent_collisions = self.episode_collisions[-window:]
+        
+        print(f"\n{'='*70}")
+        print(f"Episode {episode} Summary (Last {window} episodes):")
+        print(f"{'='*70}")
+        print(f"  Avg Reward:        {np.mean(recent_rewards):8.2f}")
+        print(f"  Avg Deliveries:    {np.mean(recent_deliveries):8.2f}")
+        print(f"  Avg Collisions:    {np.mean(recent_collisions):8.2f}")
+        print(f"  Best Avg Del:      {self.best_avg_deliveries:8.2f}")
+        print(f"  Current ε:         {self.agent_system.agents[0].epsilon:.4f}")
+        print(f"{'='*70}\n")
     
     def _save_checkpoint(self, episode):
         """Save model checkpoint"""
         os.makedirs("models", exist_ok=True)
         filepath = f"models/dqn_episode_{episode}.pth"
         
-        # Save only the shared agent
         torch.save({
             'policy_net': self.agent_system.agents[0].policy_net.state_dict(),
             'target_net': self.agent_system.agents[0].target_net.state_dict(),
@@ -482,21 +323,78 @@ class ImprovedTrainer:
             'epsilon': self.agent_system.agents[0].epsilon,
             'episode': episode
         }, filepath)
+    
+    def _load_best_model(self):
+        """Load best model"""
+        filepath = f"models/dqn_episode_best_ep{self.best_model_episode}.pth"
+        checkpoint = torch.load(filepath)
+        self.agent_system.agents[0].policy_net.load_state_dict(checkpoint['policy_net'])
+        print(f"✅ Loaded best model from episode {self.best_model_episode}")
+    
+    def _save_plots(self):
+        """Save training curves"""
+        fig, axes = plt.subplots(2, 2, figsize=(14, 10))
         
-        if episode != 'final':
-            print(f"  💾 Checkpoint saved: episode {episode}")
+        axes[0, 0].plot(self.episode_deliveries, alpha=0.6)
+        if len(self.episode_deliveries) >= 50:
+            ma = np.convolve(self.episode_deliveries, np.ones(50)/50, mode='valid')
+            axes[0, 0].plot(range(49, len(self.episode_deliveries)), ma, 'r-', linewidth=2)
+        axes[0, 0].set_title('Deliveries per Episode')
+        axes[0, 0].set_xlabel('Episode')
+        axes[0, 0].grid(True, alpha=0.3)
+        
+        axes[0, 1].plot(self.episode_rewards, alpha=0.6)
+        if len(self.episode_rewards) >= 50:
+            ma = np.convolve(self.episode_rewards, np.ones(50)/50, mode='valid')
+            axes[0, 1].plot(range(49, len(self.episode_rewards)), ma, 'r-', linewidth=2)
+        axes[0, 1].set_title('Rewards per Episode')
+        axes[0, 1].set_xlabel('Episode')
+        axes[0, 1].grid(True, alpha=0.3)
+        
+        axes[1, 0].plot(self.episode_collisions, alpha=0.6)
+        if len(self.episode_collisions) >= 50:
+            ma = np.convolve(self.episode_collisions, np.ones(50)/50, mode='valid')
+            axes[1, 0].plot(range(49, len(self.episode_collisions)), ma, 'r-', linewidth=2)
+        axes[1, 0].set_title('Collisions per Episode')
+        axes[1, 0].set_xlabel('Episode')
+        axes[1, 0].grid(True, alpha=0.3)
+        
+        axes[1, 1].plot(self.episode_losses, alpha=0.6)
+        if len(self.episode_losses) >= 50:
+            ma = np.convolve(self.episode_losses, np.ones(50)/50, mode='valid')
+            axes[1, 1].plot(range(49, len(self.episode_losses)), ma, 'r-', linewidth=2)
+        axes[1, 1].set_title('Training Loss')
+        axes[1, 1].set_xlabel('Episode')
+        axes[1, 1].grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig(f"{self.log_dir}/training_curves.png", dpi=150)
+        print(f"✅ Plots saved to {self.log_dir}/training_curves.png")
+    
+    def _save_metrics(self):
+        """Save metrics to JSON"""
+        metrics = {
+            'episode_rewards': self.episode_rewards,
+            'episode_deliveries': self.episode_deliveries,
+            'episode_collisions': self.episode_collisions,
+            'episode_losses': self.episode_losses,
+            'best_avg_deliveries': float(self.best_avg_deliveries),
+            'best_model_episode': int(self.best_model_episode)
+        }
+        
+        with open(f"{self.log_dir}/metrics.json", 'w') as f:
+            json.dump(metrics, f, indent=2)
+        print(f"✅ Metrics saved to {self.log_dir}/metrics.json")
     
     def evaluate(self, num_episodes=20):
+        """Evaluate with assignment criteria"""
         self.agent_system.agents[0].policy_net.eval()
-        """Evaluate trained agent"""
+        
         print("\n" + "="*70)
-        print("📊 EVALUATING AGENT")
+        print("📊 FINAL EVALUATION (Greedy Policy)")
         print("="*70 + "\n")
         
-        eval_deliveries = []
-        eval_collisions = []
-        eval_rewards = []
-        eval_steps = []
+        eval_results = []
         
         for ep in range(num_episodes):
             state = self.env.reset()
@@ -504,7 +402,6 @@ class ImprovedTrainer:
             done = False
             
             while not done:
-                # Greedy actions only (no exploration)
                 action_indices = self.agent_system.select_actions(state, explore=False)
                 actions = [self.action_map[idx] for idx in action_indices]
                 next_state, rewards, done, info = self.env.step(actions)
@@ -512,63 +409,53 @@ class ImprovedTrainer:
                 state = next_state
                 total_reward += sum(rewards)
             
-            eval_deliveries.append(self.env.total_deliveries)
-            eval_collisions.append(self.env.total_collisions)
-            eval_rewards.append(total_reward)
-            eval_steps.append(self.env.total_steps)
+            eval_results.append({
+                'deliveries': self.env.total_deliveries,
+                'collisions': self.env.total_collisions,
+                'steps': self.env.total_steps,
+                'reward': total_reward
+            })
             
-            print(f"Eval {ep+1:2d}: Deliveries={self.env.total_deliveries:2d}, "
-                  f"Collisions={self.env.total_collisions:2d}, "
+            print(f"Eval {ep+1:2d}: Del={self.env.total_deliveries:2d}, "
+                  f"Col={self.env.total_collisions:2d}, "
                   f"Steps={self.env.total_steps:4d}, "
                   f"Reward={total_reward:7.1f}")
         
-        print("\n" + "="*70)
-        print("EVALUATION RESULTS")
-        print("="*70)
-        print(f"Avg Deliveries: {np.mean(eval_deliveries):5.2f} ± {np.std(eval_deliveries):.2f}")
-        print(f"Avg Collisions: {np.mean(eval_collisions):5.2f} ± {np.std(eval_collisions):.2f}")
-        print(f"Avg Steps:      {np.mean(eval_steps):5.2f} ± {np.std(eval_steps):.2f}")
-        print(f"Avg Reward:     {np.mean(eval_rewards):5.2f} ± {np.std(eval_rewards):.2f}")
+        # Assignment evaluation
+        final_eval = self.evaluator.evaluate_final(eval_results)
+        self.evaluator.print_evaluation(final_eval)
         
-        # Calculate success rate
-        total_deliveries = sum(eval_deliveries)
-        total_attempts = total_deliveries + sum(eval_collisions)
-        success_rate = total_deliveries / max(1, total_attempts)
-        print(f"Success Rate:   {success_rate:.2%}")
-        print("="*70 + "\n")
+        # Save evaluation
+        with open(f"{self.log_dir}/final_evaluation.json", 'w') as f:
+            json.dump(final_eval, f, indent=2)
+        
         self.agent_system.agents[0].policy_net.train()
+        
+        return final_eval
 
 
-# ============================================
-# 5. MAIN FUNCTION
-# ============================================
 def main():
     """Main entry point"""
     print("\n" + "="*70)
-    print("🔧 MULTI-AGENT DQN TRAINING SYSTEM")
+    print("🎯 ASSIGNMENT COMPLIANT MULTI-AGENT DQN TRAINER")
     print("="*70)
     print("\nKey Features:")
-    print("✅ Spread out starting positions (corners)")
-    print("✅ Reduced collision penalty: -2.0")
-    print("✅ Progress rewards: +1.0 for moving closer")
-    print("✅ Pickup reward: +5.0")
-    print("✅ Delivery reward: +20.0")
-    print("✅ Slower epsilon decay: 0.998")
-    print("✅ Lower learning rate: 0.0005")
-    print("✅ Higher collision tolerance: 10")
+    print("✅ Max steps: 1500")
+    print("✅ Max collisions: 4")
+    print("✅ Assignment evaluation criteria")
+    print("✅ Performance points calculation")
     print("="*70 + "\n")
     
     try:
-        trainer = ImprovedTrainer()
+        trainer = AssignmentTrainer(config_path="config.yaml")
         trainer.train()
-        trainer.evaluate(num_episodes=20)
         
-        print("\n🎉 Training complete! Check logs/ folder for detailed results.")
+        print("\n🎉 Training complete! Check logs/ and models/ folders.")
         
     except KeyboardInterrupt:
         print("\n\n⚠️ Training interrupted by user.")
     except Exception as e:
-        print(f"\n\n❌ Error during training: {e}")
+        print(f"\n\n❌ Error: {e}")
         import traceback
         traceback.print_exc()
 

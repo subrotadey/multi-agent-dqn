@@ -1,0 +1,11 @@
+{
+  "success_rate": 0.0,
+  "total_deliveries": 0,
+  "total_collisions": 80,
+  "avg_steps_per_delivery": 140.0,
+  "performance_points": 0,
+  "meets_95_target": false,
+  "meets_85_target": false,
+  "collision_budget_ok": true,
+  "steps_budget_ok": false
+}

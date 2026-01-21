@@ -1,6 +1,6 @@
 """
-DQN Agent - Day 4
-=================
+DQN Agent - FIXED VERSION
+==========================
 Combines DQN network with replay buffer and training logic
 Implements epsilon-greedy policy and target network
 """
@@ -50,10 +50,6 @@ class DQNAgent:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Using device: {self.device}")
         
-        # Import DQN and ReplayBuffer
-        from dqn import DQN
-        from agent import ReplayBuffer
-        
         # Main network (policy network)
         self.policy_net = DQN(state_size, action_size).to(self.device)
         
@@ -85,7 +81,7 @@ class DQNAgent:
             explore: Whether to use epsilon-greedy (False = greedy only)
             
         Returns:
-            Selected action index
+            Selected action index (int, 0-3)
         """
         # Exploration
         if explore and np.random.random() < self.epsilon:
@@ -226,7 +222,7 @@ class MultiAgentDQNSystem:
             explore: Whether to explore
             
         Returns:
-            List of actions
+            List of action indices (each int 0-3)
         """
         actions = []
         
@@ -321,11 +317,13 @@ def test_single_agent():
     # Greedy action
     action_greedy = agent.select_action(state, explore=False)
     print(f"   Greedy action: {action_greedy}")
+    assert 0 <= action_greedy < 4, f"Action {action_greedy} out of range!"
     
     # Epsilon-greedy actions
     actions = [agent.select_action(state, explore=True) for _ in range(10)]
     print(f"   10 epsilon-greedy actions: {actions}")
     print(f"   Unique actions: {len(set(actions))}")
+    assert all(0 <= a < 4 for a in actions), "Some actions out of range!"
     
     # Store some experiences
     print("\n3. Collecting Experiences:")
@@ -391,6 +389,8 @@ def test_multi_agent_system():
     states = np.random.randn(num_agents, state_size)
     actions = ma_system.select_actions(states, explore=True)
     print(f"   Actions selected: {actions}")
+    assert len(actions) == num_agents, "Wrong number of actions!"
+    assert all(0 <= a < 4 for a in actions), f"Actions out of range: {actions}!"
     
     # Store experiences and train
     print("\n2. Training Multi-Agent System:")
@@ -418,18 +418,10 @@ if __name__ == "__main__":
         test_multi_agent_system()
         
         print("\n" + "="*50)
-        print("Day 4 - Agent Implementation Complete!")
-        print("="*50)
-        print("\nNext Steps for Day 5:")
-        print("1. Create complete training loop")
-        print("2. Integrate with environment")
-        print("3. Add logging and visualization")
-        print("4. Test with actual multi-agent scenarios")
+        print("🎉 All Agent Tests Passed!")
         print("="*50)
         
     except Exception as e:
-        print(f"\nError: {e}")
-        print("\nMake sure to:")
-        print("1. Have config.yaml in root directory")
-        print("2. Have dqn.py and replay buffer ready")
-        print("3. Run from project root")
+        print(f"\n❌ Error: {e}")
+        import traceback
+        traceback.print_exc()

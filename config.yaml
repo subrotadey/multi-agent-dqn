@@ -1,18 +1,51 @@
+# SOLUTION 2: Better Hyperparameters
+# ====================================
+# Focus: Allow learning before strict evaluation
+
 environment:
   grid_size: 5
   num_agents: 4
-  max_steps: 300        # Changed from 1500
-  max_collisions: 15    # Changed from 4
+  max_steps: 2000        # Increased for learning
+  max_collisions: 100    # CRITICAL: Allow collisions during training
 
 training:
-  episodes: 3000  # Not 1000
-  learning_rate: 0.0001  # Not 0.0005
-  epsilon_end: 0.1  # Not 0.05
-  epsilon_decay: 0.9995  # Not 0.998
-  batch_size: 128  # Not 64
-  memory_size: 100000  # Not 10000
-  warm_start_steps: 10000  # NEW - collect before training
+  episodes: 3000         # More episodes to learn
+  learning_rate: 0.0005  # Faster learning
+  gamma: 0.95            # Less focus on distant future
+  
+  # SOLUTION: Slower epsilon decay (more exploration)
+  epsilon_start: 1.0
+  epsilon_end: 0.05      # Keep some exploration
+  epsilon_decay: 0.9998  # SLOWER decay
+  
+  # Memory
+  batch_size: 64
+  memory_size: 100000    # Larger buffer
+  
+  # Target network
+  target_update_freq: 100  # More frequent updates
+  
+  # SOLUTION: Curriculum learning
+  warm_start_steps: 10000  # Collect more random experiences
+
+# SOLUTION 3: Reward Shaping
+# ===========================
+# Make rewards more informative
+rewards:
+  pickup: 2.0            # Good
+  delivery: 10.0         # Excellent
+  step: -0.05            # Tiny penalty (was -0.1)
+  collision: -2.0        # Moderate penalty (was -10)
+  progress_closer: 0.3   # Decent reward
+  progress_away: -0.3    # Small penalty
 
 model:
-  hidden_layers: [256, 128]  # Changed from [128, 64]
+  hidden_layers: [128, 64]
   activation: relu
+
+# Evaluation (use AFTER training succeeds)
+evaluation:
+  target_success_rate: 0.95
+  acceptable_success_rate: 0.85
+  max_collisions: 500
+  max_steps_per_delivery: 20

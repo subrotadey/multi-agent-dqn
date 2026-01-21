@@ -1,0 +1,16 @@
+{
+  "episode_rewards": [
+    -800.7000000000004
+  ],
+  "episode_deliveries": [
+    0
+  ],
+  "episode_collisions": [
+    4
+  ],
+  "episode_losses": [
+    243.1156191271405
+  ],
+  "best_avg_deliveries": 0.0,
+  "best_model_episode": 0
+}

@@ -1,0 +1,55 @@
+# ASSIGNMENT COMPLIANT CONFIGURATION
+# =====================================
+# Based on: Python AI Researcher Assignment
+# Performance Targets:
+#   - >95% deliveries completed (2 points)
+#   - <500 collisions during training
+#   - <20 steps per delivery
+#   - Total step budget: 1,500
+
+environment:
+  grid_size: 5
+  num_agents: 4
+  max_steps: 1500        # CRITICAL: Assignment requirement
+  max_collisions: 4      # CRITICAL: Assignment requirement
+
+training:
+  episodes: 2000         # Enough to learn but not excessive
+  learning_rate: 0.0001
+  gamma: 0.99
+  
+  # Epsilon decay strategy
+  epsilon_start: 1.0
+  epsilon_end: 0.01
+  epsilon_decay: 0.9995
+  
+  # Memory and batch
+  batch_size: 64
+  memory_size: 50000
+  
+  # Target network
+  target_update_freq: 200
+  
+  # Warm start (collect experiences before training)
+  warm_start_steps: 5000
+
+# REVISED REWARD STRUCTURE
+# Goal: Encourage efficiency, penalize collisions heavily
+rewards:
+  pickup: 1.0          # Modest reward for pickup
+  delivery: 10.0       # Good reward for successful delivery
+  step: -0.1           # Small penalty to encourage speed
+  collision: -10.0     # HEAVY penalty (only 4 allowed!)
+  progress_closer: 0.5 # Reward for moving toward target
+  progress_away: -0.5  # Penalty for moving away
+
+model:
+  hidden_layers: [128, 64]
+  activation: relu
+
+# EVALUATION CRITERIA (from assignment)
+evaluation:
+  target_success_rate: 0.95      # >95% for 2 points
+  acceptable_success_rate: 0.85  # >85% for 1 point
+  max_collisions: 500            # <500 for 2 points
+  max_steps_per_delivery: 20     # <20 steps per delivery
