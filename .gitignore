@@ -1,5 +1,0 @@
-echo __pycache__/ > .gitignore
-echo *.pyc >> .gitignore
-echo .vscode/ >> .gitignore
-echo logs/ >> .gitignore
-echo models/*.pth >> .gitignore

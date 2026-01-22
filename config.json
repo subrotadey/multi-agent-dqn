@@ -1,0 +1,34 @@
+{
+  "grid_size": 5,
+  "n_agents": 4,
+  "A": [
+    0,
+    0
+  ],
+  "B": [
+    4,
+    4
+  ],
+  "episodes": 1500,
+  "max_steps": 50,
+  "gamma": 0.99,
+  "lr": 0.001,
+  "hidden": 256,
+  "batch": 64,
+  "replay": 30000,
+  "eps_start": 0.6,
+  "eps_end": 0.05,
+  "eps_decay": 12000,
+  "collision_penalty": -80.0,
+  "pickup_reward": 1.0,
+  "delivery_reward": 120.0,
+  "step_penalty": -0.01,
+  "device": "cpu",
+  "logdir": "runs/phase2_dqn_safe_final",
+  "video_file": "phase2_safe_final_demo.mp4",
+  "target_update_every": 100,
+  "phase_a_steps": 4000,
+  "joint_action_every": 50,
+  "max_total_steps": 75000,
+  "log_every": 50
+}
