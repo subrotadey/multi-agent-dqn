@@ -1,9 +1,3 @@
-"""
-Multi-Agent DQN - COMPLETELY FROM SCRATCH
-Neural Network built with PURE NUMPY (no nn.Module!)
-Only basic numpy operations - true "bread from flour"
-"""
-
 import numpy as np
 import random
 from enum import Enum
