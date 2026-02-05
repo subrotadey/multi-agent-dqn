@@ -674,13 +674,13 @@ def train(num_episodes=10000, steps_per_episode=50):
         
         if total_collisions < 500 and avg_spd < 20:
             perf = 2
-            print("✅ 2 PERFORMANCE POINTS!")
+            print("2 PERFORMANCE POINTS!")
         elif total_collisions < 1000:
             perf = 1
-            print("✅ 1 PERFORMANCE POINT")
+            print("1 PERFORMANCE POINT")
         else:
             perf = 0
-            print("❌ 0 POINTS")
+            print("0 POINTS")
         
         alpha = 1 - (33/200) * max(0, 3 - perf)
         print(f"Scaling Factor (α): {alpha:.3f}")
@@ -793,7 +793,7 @@ def create_plots(stats, safe_phase):
     Total Deliveries: {stats['cum_deliveries'][-1]}
     
     Target: < 500 collisions
-    Status: {"✅ PASS" if stats['cum_collisions'][-1] < 500 else "❌ FAIL"}
+    Status: {"PASS" if stats['cum_collisions'][-1] < 500 else "FAIL"}
     
     Scaling Factor (α): 0.835
     """
@@ -812,9 +812,9 @@ def create_plots(stats, safe_phase):
 # ============================================================================
 
 if __name__ == "__main__":
-    print("\n🚀 Starting pure numpy training...\n")
+    print("\nStarting pure numpy training...\n")
     agents = train(num_episodes=10000, steps_per_episode=50)
-    print("\n✅ Training complete!")
-    print("📊 Check training_graph.png")
-    print("📝 Check training_log.csv")
-    print("\n💪 100% from scratch - NO nn.Module!")
+    print("\nTraining complete!")
+    print("Check training_graph.png")
+    print("Check training_log.csv")
+    print("\n100% from scratch - NO nn.Module!")
